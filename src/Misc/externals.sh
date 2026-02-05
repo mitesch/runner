@@ -34,6 +34,7 @@ function acquireExternalTool() {
     local download_source=$1 # E.g. https://github.com/microsoft/vswhere/releases/download/2.6.7/vswhere.exe
     local target_dir="$LAYOUT_DIR/externals/$2" # E.g. $LAYOUT_DIR/externals/vswhere
     local fix_nested_dir=$3 # Flag that indicates whether to move nested contents up one directory.
+    local extract_filter=$4 # Optional: specific file or folder to extract (e.g. "bin/node"). Relative to nested dir if fix_nested_dir is set.
 
     # Extract the portion of the URL after the protocol. E.g. github.com/microsoft/vswhere/releases/download/2.6.7/vswhere.exe
     local relative_url="${download_source#*://}"
@@ -99,26 +100,58 @@ function acquireExternalTool() {
         mkdir -p "$target_dir" || checkRC 'mkdir'
         local nested_dir=""
         if [[ "$download_basename" == *.zip ]]; then
-            # Extract the zip.
-            echo "Extracting zip to layout"
-            unzip "$download_target" -d "$target_dir" > /dev/null
-            local rc=$?
-            if [[ $rc -ne 0 && $rc -ne 1 ]]; then
-                failed "unzip failed with return code $rc"
-            fi
-
             # Capture the nested directory path if the fix_nested_dir flag is set.
             if [[ "$fix_nested_dir" == "fix_nested_dir" ]]; then
                 nested_dir="${download_basename%.zip}" # Remove the trailing ".zip".
             fi
-        elif [[ "$download_basename" == *.tar.gz ]]; then
-            # Extract the tar gz.
-            echo "Extracting tar gz to layout"
-            tar xzf "$download_target" -C "$target_dir" > /dev/null || checkRC 'tar'
 
+            # Build the extraction filter if specified.
+            local zip_filters=()
+            if [[ "$extract_filter" != "" ]]; then
+                for filter in $extract_filter; do
+                    if [[ "$nested_dir" != "" ]]; then
+                        zip_filters+=("$nested_dir/$filter")
+                    else
+                        zip_filters+=("$filter")
+                    fi
+                done
+            fi
+
+            # Extract the zip.
+            echo "Extracting zip to layout"
+            if [[ ${#zip_filters[@]} -gt 0 ]]; then
+                unzip "$download_target" "${zip_filters[@]}" -d "$target_dir" > /dev/null
+            else
+                unzip "$download_target" -d "$target_dir" > /dev/null
+            fi
+            local rc=$?
+            if [[ $rc -ne 0 && $rc -ne 1 ]]; then
+                failed "unzip failed with return code $rc"
+            fi
+        elif [[ "$download_basename" == *.tar.gz ]]; then
             # Capture the nested directory path if the fix_nested_dir flag is set.
             if [[ "$fix_nested_dir" == "fix_nested_dir" ]]; then
                 nested_dir="${download_basename%.tar.gz}" # Remove the trailing ".tar.gz".
+            fi
+
+            # Build the extraction filter if specified.
+            local tar_filters=()
+            if [[ "$extract_filter" != "" ]]; then
+                for filter in $extract_filter; do
+                    if [[ "$nested_dir" != "" ]]; then
+                        tar_filters+=("$nested_dir/$filter")
+                    else
+                        tar_filters+=("$filter")
+                    fi
+                done
+            fi
+
+            # Extract the tar gz.
+            echo "Extracting tar gz to layout"
+            if [[ ${#tar_filters[@]} -gt 0 ]]; then
+                tar xzf "$download_target" -C "$target_dir" "${tar_filters[@]}" > /dev/null || checkRC 'tar'
+            else
+                tar xzf "$download_target" -C "$target_dir" > /dev/null || checkRC 'tar'
             fi
         else
             # Copy the file.
@@ -161,29 +194,29 @@ fi
 
 # Download the external tools only for OSX.
 if [[ "$PACKAGERUNTIME" == "osx-x64" ]]; then
-    acquireExternalTool "$NODE_URL/v${NODE20_VERSION}/node-v${NODE20_VERSION}-darwin-x64.tar.gz" node20 fix_nested_dir
-    acquireExternalTool "$NODE_URL/v${NODE24_VERSION}/node-v${NODE24_VERSION}-darwin-x64.tar.gz" node24 fix_nested_dir
+    acquireExternalTool "$NODE_URL/v${NODE20_VERSION}/node-v${NODE20_VERSION}-darwin-x64.tar.gz" node20 fix_nested_dir "bin/node LICENSE"
+    acquireExternalTool "$NODE_URL/v${NODE24_VERSION}/node-v${NODE24_VERSION}-darwin-x64.tar.gz" node24 fix_nested_dir "bin/node LICENSE"
 fi
 
 if [[ "$PACKAGERUNTIME" == "osx-arm64" ]]; then
     # node.js v12 doesn't support macOS on arm64.
-    acquireExternalTool "$NODE_URL/v${NODE20_VERSION}/node-v${NODE20_VERSION}-darwin-arm64.tar.gz" node20 fix_nested_dir
-    acquireExternalTool "$NODE_URL/v${NODE24_VERSION}/node-v${NODE24_VERSION}-darwin-arm64.tar.gz" node24 fix_nested_dir
+    acquireExternalTool "$NODE_URL/v${NODE20_VERSION}/node-v${NODE20_VERSION}-darwin-arm64.tar.gz" node20 fix_nested_dir "bin/node LICENSE"
+    acquireExternalTool "$NODE_URL/v${NODE24_VERSION}/node-v${NODE24_VERSION}-darwin-arm64.tar.gz" node24 fix_nested_dir "bin/node LICENSE"
 fi
 
 # Download the external tools for Linux PACKAGERUNTIMEs.
 if [[ "$PACKAGERUNTIME" == "linux-x64" ]]; then
-    acquireExternalTool "$NODE_URL/v${NODE20_VERSION}/node-v${NODE20_VERSION}-linux-x64.tar.gz" node20 fix_nested_dir
+    acquireExternalTool "$NODE_URL/v${NODE20_VERSION}/node-v${NODE20_VERSION}-linux-x64.tar.gz" node20 fix_nested_dir "bin/node LICENSE"
     acquireExternalTool "$NODE_ALPINE_URL/v${NODE20_VERSION}/node-v${NODE20_VERSION}-alpine-x64.tar.gz" node20_alpine
-    acquireExternalTool "$NODE_URL/v${NODE24_VERSION}/node-v${NODE24_VERSION}-linux-x64.tar.gz" node24 fix_nested_dir
+    acquireExternalTool "$NODE_URL/v${NODE24_VERSION}/node-v${NODE24_VERSION}-linux-x64.tar.gz" node24 fix_nested_dir "bin/node LICENSE"
     acquireExternalTool "$NODE_ALPINE_URL/v${NODE24_VERSION}/node-v${NODE24_VERSION}-alpine-x64.tar.gz" node24_alpine
 fi
 
 if [[ "$PACKAGERUNTIME" == "linux-arm64" ]]; then
-    acquireExternalTool "$NODE_URL/v${NODE20_VERSION}/node-v${NODE20_VERSION}-linux-arm64.tar.gz" node20 fix_nested_dir
-    acquireExternalTool "$NODE_URL/v${NODE24_VERSION}/node-v${NODE24_VERSION}-linux-arm64.tar.gz" node24 fix_nested_dir
+    acquireExternalTool "$NODE_URL/v${NODE20_VERSION}/node-v${NODE20_VERSION}-linux-arm64.tar.gz" node20 fix_nested_dir "bin/node LICENSE"
+    acquireExternalTool "$NODE_URL/v${NODE24_VERSION}/node-v${NODE24_VERSION}-linux-arm64.tar.gz" node24 fix_nested_dir "bin/node LICENSE"
 fi
 
 if [[ "$PACKAGERUNTIME" == "linux-arm" ]]; then
-    acquireExternalTool "$NODE_URL/v${NODE20_VERSION}/node-v${NODE20_VERSION}-linux-armv7l.tar.gz" node20 fix_nested_dir
+    acquireExternalTool "$NODE_URL/v${NODE20_VERSION}/node-v${NODE20_VERSION}-linux-armv7l.tar.gz" node20 fix_nested_dir "bin/node LICENSE"
 fi
